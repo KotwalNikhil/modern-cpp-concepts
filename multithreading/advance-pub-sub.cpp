@@ -115,3 +115,27 @@ int main() {
 	t.join();
 	return 0;
 }
+
+
+
+/*
+Area of improvement in the above code
+Message is created in heap but not deleted, use shared ptr to send messages
+
+Single-Pass Processing in processMessage:
+processMessage runs in a separate thread (t1), waits for any message, processes all currently available messages, and then the thread immediately join()s in main.
+This means your PubSub system only processes messages once. If p1.publish were called after t1.join() or if there were a delay, no more messages would be processed.
+Fix: processMessage should typically run in a continuous loop, constantly waiting for new messages, processing them, and then waiting again. You'll need a mechanism to signal this thread to shut down gracefully.
+
+PubSub stores raw Subscriber* pointers in subscribers_. If a Subscriber object is destroyed (e.g., s1 or s2 go out of scope in main), the PubSub instance will hold a dangling pointer. Accessing this pointer later would result in undefined behavior.
+Fix: Use std::shared_ptr<Subscriber> or std::weak_ptr<Subscriber> for subscriber management. std::weak_ptr is ideal to avoid circular references if subscribers also hold shared_ptr to PubSub.
+
+Specific onAlphaEvent:
+The Subscriber class has a hardcoded onAlphaEvent method. In a real-world pub-sub system, subscribers might want to register different callback functions for different topics or have different processing logic.
+Improvement: Use std::function to allow subscribers to register a generic callable (lambda, function pointer, or functor) as their message handler.
+
+The above code also support multiple Publishers:
+
+The PubSub::publish method uses a std::mutex to protect access to the topics_ map and the message queue. This means multiple Publisher instances (or multiple threads calling publish from different publishers) can call publish concurrently without causing data corruption. The mutex ensures that only one publisher modifies the shared topics_ map at any given time.
+In the main function of the improved code, I've added Publisher p2(pubsub); and p2.publish(...) calls to explicitly demonstrate this.
+*/
