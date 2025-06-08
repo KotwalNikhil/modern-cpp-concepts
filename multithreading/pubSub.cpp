@@ -1,43 +1,73 @@
-#include<thread>
-#include<mutex>
-#include<condition_variable>
-#include<iostream>
+#include <iostream>
+#include <thread>
+#include <condition_variable>
+#include <mutex>
+#include <queue>
 using namespace std;
 
-std::mutex mtx;
-condition_variable cv;
-bool data_ready = false;
-int result = 0;
+class PubSub
+{
 
+std::mutex mtx_;
+condition_variable cv_;
+bool running_ = true;
+queue<int>buffer_;
+size_t capacity_;
 
-// publisher code
-auto publish = [](){
-		std::this_thread::sleep_for(std::chrono::seconds(5));
-		std::unique_lock<std::mutex> lock(mtx);
+public:
+	PubSub(size_t capacity) : capacity_(capacity) {}
 
-		result = 50;
-		data_ready = true;
-		cout << "Data Produced! " <<result<< endl;
-		lock.unlock();
-		cv.notify_one();
-	};
+	void publisher(int val)
+	{
+		for(int i =0;i<val;i++)
+		{
+			unique_lock<mutex>lock(mtx_);
+			cv_.wait(lock, [this](){return buffer_.size() < capacity_;});
+			buffer_.push(i+1);
+			cout<<"Publisher published val = "<< (i+1) <<endl;
+			cv_.notify_one();
+		}
 
-// subscriber code
-auto subscribe = [](){
+		unique_lock<mutex>lock(mtx_);
+		running_ = false;
+		cv_.notify_all();
+		
+	}
 
-	// locking
-    unique_lock<mutex> lock(mtx);
-    cv.wait(lock, []{return data_ready;});
-    cout<<"data consumed "<<result<<endl;
+	void subscriber()
+	{
+		while(true)
+		{
+			unique_lock<mutex>lock(mtx_);
+			cv_.wait(lock, [this](){
+				return ((buffer_.size() > 0) || (!running_));
+			});
+
+			if(buffer_.empty() && running_ == false){
+				std::cout << "Subscriber: Publisher finished and buffer empty. Exiting." << std::endl;
+				break;
+			}
+
+			int val = buffer_.front();
+			buffer_.pop();
+
+			cout<<"reading val = " << val <<endl;
+
+			cv_.notify_one();
+		}
+	}
+
 };
 
-int main() {
-	
-	std::thread subscriber(subscribe);
-	std::thread publisher(publish);
-	
-	subscriber.join();
-	publisher.join();
+int main() 
+{
+	PubSub pubsub(50);
+
+	thread t1(&PubSub::publisher, &pubsub, 100);
+	thread t2(&PubSub::subscriber, &pubsub);
+
+	t1.join();
+	t2.join();
 	
 	return 0;
 }
