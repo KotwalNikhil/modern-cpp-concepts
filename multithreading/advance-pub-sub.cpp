@@ -8,6 +8,8 @@
 
 using namespace std;
 
+// SPMS- single publisher multiple subscriber with topics support and callbacks
+
 class Subscriber;
 
 class Message{

@@ -1,73 +1,89 @@
-#include <iostream>
-#include <thread>
-#include <condition_variable>
-#include <mutex>
-#include <queue>
+#include <bits/stdc++.h>
 using namespace std;
+
+// topic based pubSub model
+
+using Feed = std::string;
+using Callback = std::function<void(int)>;
 
 class PubSub
 {
-
-std::mutex mtx_;
-condition_variable cv_;
-bool running_ = true;
-queue<int>buffer_;
-size_t capacity_;
-
 public:
-	PubSub(size_t capacity) : capacity_(capacity) {}
-
-	void publisher(int val)
+	struct Subscription
 	{
-		for(int i =0;i<val;i++)
-		{
-			unique_lock<mutex>lock(mtx_);
-			cv_.wait(lock, [this](){return buffer_.size() < capacity_;});
-			buffer_.push(i+1);
-			cout<<"Publisher published val = "<< (i+1) <<endl;
-			cv_.notify_one();
-		}
+		int id;
+		Feed feed;
+	};
 
-		unique_lock<mutex>lock(mtx_);
-		running_ = false;
-		cv_.notify_all();
-		
+	Subscription subscribe(Feed feed, Callback cb)
+	{
+		counter++;
+		mp[feed].push_back({counter, std::move(cb)});
+		return {counter, feed};
 	}
 
-	void subscriber()
+	void unSubscribe(Subscription& sub)
 	{
-		while(true)
+		auto it = mp.find(sub.feed);
+		if(it == mp.end())return;
+
+		// remove_if moves the elements in the front and return the new logical end
+		// v.erase(new_end, end)
+		auto& v = it->second;
+		v.erase(remove_if(v.begin(), v.end(), [&](const auto& p){
+			return p.first == sub.id;
+		}), v.end());
+
+		if(v.empty())
 		{
-			unique_lock<mutex>lock(mtx_);
-			cv_.wait(lock, [this](){
-				return ((buffer_.size() > 0) || (!running_));
-			});
-
-			if(buffer_.empty() && running_ == false){
-				std::cout << "Subscriber: Publisher finished and buffer empty. Exiting." << std::endl;
-				break;
-			}
-
-			int val = buffer_.front();
-			buffer_.pop();
-
-			cout<<"reading val = " << val <<endl;
-
-			cv_.notify_one();
+			mp.erase(it);
 		}
 	}
 
+	void publish(Feed feed, int data)
+	{
+		auto it = mp.find(feed);
+		if(it == mp.end())return;
+
+		auto& v = it->second;
+
+		for(auto& cb : v)
+		{
+			cb.second(data);
+		}
+	}
+
+private:
+	unordered_map<Feed, vector<pair<int,Callback>>>mp;
+	int counter{0};
 };
 
-int main() 
+int main()
 {
-	PubSub pubsub(50);
+	PubSub pubsub;
+	auto sub1 = pubsub.subscribe("eurusd.ebs", [](int data){
+		cout<<"Subscriber 1ebs received data ="<<data<<endl;
+	});
 
-	thread t1(&PubSub::publisher, &pubsub, 100);
-	thread t2(&PubSub::subscriber, &pubsub);
+	auto sub2 = pubsub.subscribe("eurusd.ebs", [](int data){
+		cout<<"Subscriber 2ebs received data ="<<data<<endl;
+	});
 
-	t1.join();
-	t2.join();
-	
+	auto sub3 = pubsub.subscribe("eurusd.cme", [](int data){
+		cout<<"Subscriber 3cme received data ="<<data<<endl;
+	});
+
+	pubsub.publish("eurusd.ebs", 100);
+	pubsub.publish("eurusd.ebs", 200);
+	pubsub.publish("eurusd.cme", 300);
+
+	pubsub.unSubscribe(sub2);
+
+	pubsub.publish("eurusd.ebs", 100);
+	pubsub.publish("eurusd.ebs", 200);
+	pubsub.publish("eurusd.cme", 300);
+
+
 	return 0;
+
 }
