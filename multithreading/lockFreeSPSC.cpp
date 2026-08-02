@@ -1,0 +1,94 @@
+// lock free SPSC model
+#include <atomic>
+#include <iostream>
+#include <queue>
+#include <thread>
+
+using namespace std;
+
+template<typename T>
+class SPSC
+{
+public:
+    SPSC(size_t capacity):capacity_(capacity), buffer_(capacity){}
+
+    bool push(const T& item)
+    {
+        size_t head = head_.load(memory_order_relaxed);
+        int next = increment(head);
+        if(next == tail_.load(memory_order_acquire))
+        {
+            cout<<"Buffer is full\n";
+            return false;
+        }
+
+        buffer_[head] = item;
+        head_.store(next, memory_order_release);
+        return true;
+    }
+
+    bool pop(T& item)
+    {
+        size_t tail = tail_.load(memory_order_relaxed);
+        if(tail == head_.load(memory_order_acquire))
+        {
+            cout<<"buffer is empty\n";
+            return false;
+        }
+
+        item = buffer_[tail];
+        tail_.store(increment(tail), memory_order_release);
+        return true;
+    }
+
+    size_t increment(size_t idx)
+    {
+        return (idx+1)&(capacity_-1); // make sure (capacity & (capacity-1)) == 0 i.e power of 2
+    }
+
+private:
+    size_t capacity_;
+    vector<T>buffer_;
+    alignas(64) atomic<size_t> head_{0}; // To avoid false sharing by preventing head and tail to be present on the same cache line
+    alignas(64) atomic<size_t> tail_{0};
+};
+
+SPSC<int>spsc(32);
+
+void producer()
+{
+    int i=0;
+    while(true)
+    {
+        if(spsc.push(i))
+        {
+            cout<<"Produced value = "<<i<<endl;
+            ++i;
+        }
+
+        this_thread::sleep_for(chrono::milliseconds(100));
+    }
+}
+
+void consumer()
+{
+    int value;
+    while(true)
+    {
+        if(spsc.pop(value))
+        {
+            cout<<"Received value of "<<value<<endl;
+            this_thread::sleep_for(chrono::milliseconds(1000));
+        }
+    }
+}
+
+int main()
+{
+ thread prod(producer);
+ thread con(consumer);
+
+ con.join();
+ prod.join();
+
+}
