@@ -90,14 +90,13 @@ void producer(int val)
     int i=0;
     while(true)
     {
-        while(i<val && spmc.push(i))
+        if (i<val && spmc.push(i))
         {
             cout<<this_thread::get_id()<<" published value= "<<i<<endl;
-            this_thread::sleep_for(chrono::milliseconds(500));
             i++;
         }
+        this_thread::sleep_for(chrono::milliseconds(500));
     }
-    
 }
 
 void consumer()
@@ -109,7 +108,9 @@ void consumer()
             cout<<this_thread::get_id()<<" Consumer value= "<<val<<endl;
             this_thread::sleep_for(chrono::milliseconds(700));
 
-            }
+        } else{ // queue is empty
+            this_thread::yield();
+        }
     }
 }
 
