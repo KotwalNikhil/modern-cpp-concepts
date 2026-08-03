@@ -1,3 +1,6 @@
+// practice how to create custom type traits and concepts and use them as SFINAE
+// See notes on notebook for more about SFINAE constrainst placements positions
+
 #include <iostream>
 #include <type_traits>
 #include <concepts>
