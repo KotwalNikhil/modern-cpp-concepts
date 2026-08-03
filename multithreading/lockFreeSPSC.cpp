@@ -3,6 +3,7 @@
 #include <iostream>
 #include <queue>
 #include <thread>
+#include <cassert>
 
 using namespace std;
 
@@ -10,7 +11,9 @@ template<typename T>
 class SPSC
 {
 public:
-    SPSC(size_t capacity):capacity_(capacity), buffer_(capacity){}
+    SPSC(size_t capacity):capacity_(capacity), buffer_(capacity){
+        assert(capacity_ > 0 && (capacity_ & (capacity_ - 1)) == 0 && "capacity must be a power of 2 and > 0");
+    }
 
     bool push(const T& item)
     {
