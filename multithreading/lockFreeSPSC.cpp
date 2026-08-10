@@ -4,16 +4,18 @@
 #include <queue>
 #include <thread>
 #include <cassert>
+#include <array>
 
 using namespace std;
 
-template<typename T>
+template<typename T, size_t N>
 class SPSC
 {
+    static_assert((N & (N-1)) == 0, "size of queue should be power of 2");
 public:
-    SPSC(size_t capacity):capacity_(capacity), buffer_(capacity){
-        assert(capacity_ > 0 && (capacity_ & (capacity_ - 1)) == 0 && "capacity must be a power of 2 and > 0");
-    }
+    // SPSC(size_t capacity):capacity_(capacity), buffer_(capacity){
+    //     assert(capacity_ > 0 && (capacity_ & (capacity_ - 1)) == 0 && "capacity must be a power of 2 and > 0");
+    // }
 
     bool push(const T& item)
     {
@@ -46,17 +48,16 @@ public:
 
     size_t increment(size_t idx)
     {
-        return (idx+1)&(capacity_-1); // make sure (capacity & (capacity-1)) == 0 i.e power of 2
+        return (idx+1)&(N-1); // make sure (capacity & (capacity-1)) == 0 i.e power of 2
     }
 
 private:
-    size_t capacity_;
-    vector<T>buffer_;
+    array<T, N> buffer_;
     alignas(64) atomic<size_t> head_{0}; // To avoid false sharing by preventing head and tail to be present on the same cache line
     alignas(64) atomic<size_t> tail_{0};
 };
 
-SPSC<int>spsc(32);
+SPSC<int, 32>spsc;
 
 void producer()
 {
