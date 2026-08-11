@@ -7,6 +7,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <functional>
+#include <future>
 using namespace std;
 
 class ThreadPool
@@ -43,14 +44,37 @@ public:
     }
 
     // using template as it makes submit works for any lambds, fun ptr, functions and emplace_back will cast them into function<void()> inside tasks
-    template<typename F>
-    void submit(F&& fun) // F&& is a forwarding reference, can be used to pass both lvalue, rvalue
+    // template<typename F>
+    // void submit(F&& fun) // F&& is a forwarding reference, can be used to pass both lvalue, rvalue
+    // {
+    //     {
+    //         lock_guard<mutex> lock(mtx);
+    //         tasks.emplace(std::forward<F>(fun)); // preserves the value of expression 
+    //     }
+    //     cv.notify_one();
+    // }
+
+    // what if we need a return from the thread process- we use packaged_Task in a lambda
+    template <typename F, typename ...Args>
+    auto submit(F&& f, Args&&... args) -> std::future<invoke_result_t<F, Args...>>
     {
+        using ReturnType = invoke_result_t<F, Args...>;
+        auto task = std::make_shared<packaged_task<ReturnType()>>(
+            [f = std::forward<F>(f),
+            ...args = forward<Args>(args)]() mutable{
+                return f(args...);
+            }
+        );
+
+        auto result = task->get_future();
         {
-            lock_guard<mutex> lock(mtx);
-            tasks.emplace(std::forward<F>(fun)); // preserves the value of expression 
+            lock_guard<mutex>lock(mtx);
+            tasks.emplace([task]{
+            (*task)();
+                });
         }
         cv.notify_one();
+        return result;
     }
 
     ~ThreadPool()
@@ -83,9 +107,12 @@ void print()
 
 int main()
 {
-    cout<<std::this_thread::get_id()<< " Hello world\n";
+    //cout<<std::this_thread::get_id()<< " Hello world\n";
     ThreadPool pool(2);
     pool.submit([]{cout<<std::this_thread::get_id()<< " I am priting something\n";});
     pool.submit([]{cout<<std::this_thread::get_id()<< " I am priting something\n";});
     pool.submit([]{cout<<std::this_thread::get_id()<< " I am priting something\n";});
+    auto fut = pool.submit([]{cout<<std::this_thread::get_id()<< " I am calculating 43 something\n"; return 49;});
+    int x = fut.get();
+    cout<<"hello world = "<< x;
 }
